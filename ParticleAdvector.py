@@ -1,7 +1,7 @@
 
 import functions as f
 import numpy as np
-from opendrift.readers import reader_netCDF_CF_generic
+from opendrift.readers import reader_netCDF_CF_generic, reader_ROMS_native 
 from opendrift.models.oceandrift import OceanDrift
 from datetime import timedelta, datetime
 import xarray as xr
@@ -16,7 +16,7 @@ class Advection:
     """
         Class for advecting a grid of particles in an ensemble member from the Barents-2.5 EPS.
     """
-    def __init__(self, lons, lats, ts, sep, dur, date, at_time=0):
+    def __init__(self, lons, lats, ts, sep, dur, date, at_time=0, model=None):
         """
             Initiates the class. 
         Args:
@@ -29,7 +29,11 @@ class Advection:
         """
         self.lons=lons
         self.lats=lats
-        self.proj = '+proj=lcc +lat_0=77.5 +lon_0=-25 +lat_1=77.5 +lat_2=77.5 +no_defs +R=6.371e+06'
+        if model=='norkyst':
+            self.proj = '+proj=stere +lat_0=90 +lat_ts=60 +lon_0=70 +x_0=3192800 +y_0=1784000 +a=6378137 +b=6356752.3142 +units=m +no_defs +type=crs'
+        elif model=='barents':
+            self.proj = '+proj=lcc +lat_0=77.5 +lon_0=-25 +lat_1=77.5 +lat_2=77.5 +no_defs +R=6.371e+06'
+        self.model=model
         self.ts=ts
         self.sep=sep
         self.dur=dur
@@ -37,7 +41,8 @@ class Advection:
         self.at_time=at_time
 
         #self.tf = f.files_from_thredds(date, os.path.abspath('/home/mateuszm/LCS/LCS/thredds_urls.txt'))
-        self.tf = f.files_from_lustre(date)
+        #self.tf = f.files_from_thredds(date, 'thredds_urls.txt')
+        self.tf = f.files_from_lustre(date,model)
         #self.obf = f.files_from_thredds(date, os.path.abspath('/home/mateuszm/LCS/LCS/old_barents.txt'))[0]
         self.name = f.name_from_lon_lat(lons, lats)
 
@@ -48,7 +53,10 @@ class Advection:
             member     [int]    :   The ensemble member from which velocity field is to be used. Number between 0-23.
             outfile    [str]    :   Name of file output is saved to.
         """
-        ha = f.hour_adjustment(member) + self.at_time
+        if self.model=='norkyst' or self.model=='barents':
+            ha = self.at_time + self.dur
+        else:
+            ha = f.hour_adjustment(member) + self.at_time
         corr = f.correct_file(self.tf, member)
         file = corr[0]
         _m = corr[1]
@@ -61,30 +69,53 @@ class Advection:
 
         o = OceanDrift(loglevel=20)
         o.set_config('drift:advection_scheme', 'runge-kutta4')
-        r = reader_netCDF_CF_generic.Reader(file, ensemble_member=_m, proj4=self.proj)
+        if self.model=='norkyst':
+            r = reader_ROMS_native.Reader(file)
+        elif model=='barents':
+            r = reader_netCDF_CF_generic.Reader(file, ensemble_member=_m, proj4=self.proj)
 
         x, y = r.lonlat2xy(self.lons, self.lats)
-        c1 = np.arange(x[0], x[1], self.sep)
-        c2 = np.arange(y[0], y[1], self.sep)
+        if self.model=='norkyst':
+            x=x*1000.
+            y=y*1000.
+        if x[1]>x[0]:
+            c1 = np.arange(x[0], x[1], self.sep)
+        else:
+            c1 = np.arange(x[0], x[1], -self.sep)
+        if y[1]>y[0]:
+            c2 = np.arange(y[0], y[1], self.sep)
+        else:
+            c2 = np.arange(y[0], y[1], -self.sep)
         X, Y = np.meshgrid(c1, c2)
+        if self.model=='norkyst':
+            X=X/1000.
+            Y=Y/1000.
 
         lons, lats = r.xy2lonlat(X.flatten(), Y.flatten())
         
         #Starting OpenDrift
         
         o.add_reader(r)
-
+        print ('r.start_time',r.start_time, ha)
         o.seed_elements(lons.ravel(), lats.ravel(), time=r.start_time+timedelta(hours=ha), radius_type='uniform')
         o.run(duration=timedelta(hours=self.dur), time_step=timedelta(seconds=self.ts), time_step_output=timedelta(hours=self.dur), outfile=f'{string}.nc')
         lons, lats = np.reshape(lons, (X.shape[0], X.shape[1])), np.reshape(lats, (X.shape[0], X.shape[1]))
         f_x1, f_y1 = r.lonlat2xy(o.history['lon'].T[-1], o.history['lat'].T[-1])
-        
+        if self.model=='norkyst':
+            f_x1 = f_x1*1000.
+            f_y1 = f_y1*1000.
         d = xr.open_dataset(f'{string}.nc')
 
+        #os.rename(f'{string}.nc',f'{string}_copy.nc')
         os.remove(f'{string}.nc')
-        ds = xr.Dataset(coords=dict(lon = (['x', 'y'], X),
+        if self.model=='norkyst':
+            ds = xr.Dataset(coords=dict(lon = (['x', 'y'], X*1000.),
+                        lat = (['x','y'], Y*1000.)),
+                        data_vars=dict(separation=self.sep, duration=self.dur, nlon=f_x1, nlat=f_y1))
+        else:
+            ds = xr.Dataset(coords=dict(lon = (['x', 'y'], X),
                         lat = (['x','y'], Y)),
-                data_vars=dict(separation=self.sep, duration=self.dur, nlon=f_x1, nlat=f_y1))
+                        data_vars=dict(separation=self.sep, duration=self.dur, nlon=f_x1, nlat=f_y1))
         ds.to_netcdf(f'{string}.nc')
 
         return string

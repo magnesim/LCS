@@ -2,7 +2,7 @@ from ParticleAdvector import Advection
 from LCS import FTLE
 import xarray as xr
 import numpy as np
-from joblib import Parallel, delayed
+#from joblib import Parallel, delayed
 
 def _mkdir(member):
     """
@@ -17,7 +17,7 @@ def _mkdir(member):
     if not os.path.exists(f'{store_file}/member{member}'):
         os.mkdir(f'{store_file}/member{member}')
 
-def CreateLCSField(lons, lats, ts, sep, dur, date, member, output, at_time=0):
+def CreateLCSField(lons, lats, ts, sep, dur, date, member, output, at_time=0, model=None):
     """
         Advects particles using ParticleAdvector.py, which creates an output file.
         Uses this output file to compute LCSs. 
@@ -33,11 +33,12 @@ def CreateLCSField(lons, lats, ts, sep, dur, date, member, output, at_time=0):
         at_time [int]       :   Which hour of the day LCSs are computed for
     """
     _mkdir(member)
-    advector = Advection(lons, lats, ts, sep, dur, date, at_time)
+    advector = Advection(lons, lats, ts, sep, dur, date, at_time, model=model)
     outfile = advector.displace_one_member(member, output)
     LCS = xr.open_dataset(FTLE(f'{output}.nc', f'{output}_LCS'))
+    
 
-def Run(i, date, at_time=24):
+def Run(i, date, at_time=0, model=None):
     """
         Runs the particle and LCS simulation
     Args:
@@ -45,8 +46,12 @@ def Run(i, date, at_time=24):
         date    [str]   :   A string of the date, in format 'ymd', no spacings.
         at_time [int]   :   Which hour of the day LCSs are computed for
     """
-    output=f'{store_file}/member{i}/{date}_h{at_time}'
-    CreateLCSField(lons=[4.5,23], lats=[67,69.9], ts=-3600, sep=1000, dur=24, date=date, member=i, output=output, at_time=at_time)
+    output=f'{store_file}/member{i}/{date}_h{at_time}_{model}'
+#    CreateLCSField(lons=[4.5,23], lats=[67,69.9], ts=-3600, sep=1000, dur=24, date=date, member=i, output=output, at_time=at_time)
+    if model=='norkyst' or model=='barents':
+        CreateLCSField(lons=[7.8, 20.5], lats=[66.7,69.9], ts=-3600, sep=1000, dur=6, date=date, member=i, output=output, at_time=at_time, model=model)
+    else:
+        CreateLCSField(lons=[12.9, 12.8], lats=[66.1,69.0], ts=-3600, sep=1000, dur=6, date=date, member=i, output=output, at_time=at_time)
 
 if __name__ == '__main__':
     """
@@ -58,13 +63,19 @@ if __name__ == '__main__':
     import sys
     sel = int(sys.argv[1])
     #sel = 1
-    #dates = [f'202302{d:02d}' for d in range(1,32)]
-    dates = ['20230628']
+    dates = [f'202306{d:02d}' for d in range(1,10)]
+#    dates = ['20230627']
+    model = 'norkyst'
+#    model = 'barents' 
+
+#
+#     curr_date = dates[sel-1]
     
-    curr_date = dates[sel-1]
-    #Run(0, curr_date)
-    for i in range(24):
-        Run(i, curr_date)
+    for curr_date in dates:
+        Run(0, curr_date, model=model)
+    
+    #for i in range(6):
+    #    Run(i, curr_date)
     
     
     #Run(0, '20221210')

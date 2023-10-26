@@ -3,7 +3,7 @@ from cmath import inf
 import matplotlib.pyplot as plt
 #from grid_advection import particle_grid_displacement as pgd
 from opendrift.models.oceandrift import OceanDrift
-from opendrift.readers import reader_netCDF_CF_generic
+from opendrift.readers import reader_netCDF_CF_generic, reader_ROMS_native
 import xarray as xr
 
 def FTLE(file, outfile, DG=False, separation = None, duration=None):
@@ -26,6 +26,15 @@ def FTLE(file, outfile, DG=False, separation = None, duration=None):
         dur = duration
     else:
         dur = ds.duration.values
+
+    model=None
+    if 'norkyst' in file:
+        model='norkyst'
+    elif 'barents' in file:
+        model='barents'
+
+    print('sep:',sep)
+    print('model',model)
 
     x0 = np.array(ds.lon)
     y0 = np.array(ds.lat)
@@ -57,8 +66,13 @@ def FTLE(file, outfile, DG=False, separation = None, duration=None):
     if DG is False:
         # It's important to have the correct file here for the projection
         o = OceanDrift(loglevel=20)
-        r = reader_netCDF_CF_generic.Reader(o.test_data_folder() + '16Nov2015_NorKyst_z_surface/norkyst800_subset_16Nov2015.nc')
-        x0, y0 = r.xy2lonlat(x0, y0)
+#        r = reader_netCDF_CF_generic.Reader(o.test_data_folder() + '16Nov2015_NorKyst_z_surface/norkyst800_subset_16Nov2015.nc')
+        if model=='norkyst':
+            r = reader_ROMS_native.Reader('/lustre/storeB/project/fou/hi/new_norkyst/his/ocean_his.an.20230628.nc')
+            x0, y0 = r.xy2lonlat(x0/1000., y0/1000.)
+        elif model=='barents':
+            r = reader_netCDF_CF_generic.Reader('/lustre/storeB/project/fou/hi/barents_eps/eps/barents_eps_20230628T18Z.nc')
+            x0, y0 = r.xy2lonlat(x0, y0)
     
     LCS = xr.Dataset(coords = dict(lon=(['x', 'y'], x0), lat=(['x','y'], y0)),
                     data_vars = dict(ALCS=(['x', 'y'], largest_eig[::-1,::-1])))

@@ -39,6 +39,7 @@ def files_from_thredds(date, file):
                 line = re.sub('\n', '', line)
                 arr.append(line)
     arr.sort()
+    print('Arr:',arr)
     if len(arr) == 4 or len(arr) == 1:
         pass
     else:
@@ -46,14 +47,22 @@ def files_from_thredds(date, file):
 
     return arr
 
-def files_from_lustre(date):
-    path = os.path.abspath('/lustre/storeB/project/fou/hi/barents_eps/eps')
+def files_from_lustre(date,model=None):
+    if model=='norkyst':
+        path = os.path.abspath('/lustre/storeB/project/fou/hi/new_norkyst/his/')
+    elif model=='barents':
+        path = os.path.abspath('/lustre/storeB/project/fou/hi/barents_eps/eps')
     files = os.listdir(path)
     arr = []
     for file in files:
-        if re.findall(date, file) and re.findall('eps', file):
-            arr.append(path+'/'+file)
+        if model=='norkyst':
+            if re.findall(date, file):
+                arr.append(path+'/'+file)
+        elif model=='barents':
+            if re.findall(date, file) and re.findall('eps', file):
+                arr.append(path+'/'+file)
     arr.sort()
+    print('Arr:',arr)
 
     if len(arr) == 4 or len(arr) == 1:
         pass
