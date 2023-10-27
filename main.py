@@ -49,7 +49,12 @@ def Run(i, date, at_time=0, model=None):
     output=f'{store_file}/member{i}/{date}_h{at_time}_{model}'
 #    CreateLCSField(lons=[4.5,23], lats=[67,69.9], ts=-3600, sep=1000, dur=24, date=date, member=i, output=output, at_time=at_time)
     if model=='norkyst' or model=='barents':
-        CreateLCSField(lons=[7.8, 20.5], lats=[66.7,69.9], ts=-3600, sep=1000, dur=6, date=date, member=i, output=output, at_time=at_time, model=model)
+        # LoVe region
+        #CreateLCSField(lons=[7.8, 20.5], lats=[66.7,69.9], ts=-3600, sep=1000, dur=6, date=date, member=i, output=output, at_time=at_time, model=model)
+        # Sulafjorden region 
+#        CreateLCSField(lons=[5.8, 5.4], lats=[61.8,64.], ts=-3600, sep=500, dur=6, date=date, member=i, output=output, at_time=at_time, model=model)
+        # Finnmark region 
+        CreateLCSField(lons=[23.5, 26.4], lats=[69.6, 72.6], ts=-3600, sep=500, dur=6, date=date, member=i, output=output, at_time=at_time, model=model)
     else:
         CreateLCSField(lons=[12.9, 12.8], lats=[66.1,69.0], ts=-3600, sep=1000, dur=6, date=date, member=i, output=output, at_time=at_time)
 
@@ -63,7 +68,7 @@ if __name__ == '__main__':
     import sys
     sel = int(sys.argv[1])
     #sel = 1
-    dates = [f'202306{d:02d}' for d in range(1,10)]
+    dates = [f'202304{d:02d}' for d in range(1,10)]
 #    dates = ['20230627']
     model = 'norkyst'
 #    model = 'barents' 
