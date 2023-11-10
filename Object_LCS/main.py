@@ -1,9 +1,11 @@
-from ParticleAdvector import AdvectionBarentsEPS
+from ParticleAdvector import AdvectionBarentsEPS, Advection
 from LCS import FTLE
 import xarray as xr
 import numpy as np
-from joblib import Parallel, delayed
+#from joblib import Parallel, delayed
 import os
+from datetime import datetime, timedelta
+from postproc import postproc #plot_single_day
 
 def _mkdir(member):
     """
@@ -33,9 +35,22 @@ def CreateLCSField(lons, lats, ts, sep, dur, date, member, output, at_time=0):
         at_time [int]       :   Which hour of the day LCSs are computed for
     """
     _mkdir(member)
-    advector = AdvectionBarentsEPS(lons, lats, ts, sep, dur, date, at_time)
-    outfile = advector.displace_one_member(member, output)
-    LCS = xr.open_dataset(FTLE(f'{output}.nc', f'{output}_LCS'))
+#    advector = AdvectionBarentsEPS(lons, lats, ts, sep, dur, date, at_time)
+#    outfile = advector.displace_one_member(member, output)
+#    print('date',date)
+#    start = datetime.strptime(date,'%Y%m%d')
+    start = timedelta(hours=at_time)
+#    print('start',start)
+    file = 'https://thredds.met.no/thredds/dodsC/fou-hi/norkyst800m-1h/NorKyst-800m_ZDEPTHS_his.an.{}00.nc'.format(date)
+#    file = '/lustre/storeB/project/fou/hi/new_norkyst/his/ocean_his.an.{}.nc'.format(date)
+    advector = Advection(file, lons, lats, ts, sep, dur, start=start)
+    try:
+        ftle = advector.run(output)
+    except Exception:
+        print('## Warning: Skipping file: \n', file)
+        return
+#    LCS = xr.open_dataset(FTLE(f'{output}.nc', f'{output}_LCS'))
+    LCS = FTLE(ftle, f'{output}_LCS',example_model_file=file)
     os.remove(f'{output}.nc')
 
 def Run(i, date, at_time=24):
@@ -46,31 +61,74 @@ def Run(i, date, at_time=24):
         date    [str]   :   A string of the date, in format 'ymd', no spacings.
         at_time [int]   :   Which hour of the day LCSs are computed for
     """
-    output=f'{store_file}/member{i}/{date}_h{at_time}'
-    CreateLCSField(lons=[4.5,23], lats=[67,69.9], ts=-3600, sep=1000, dur=24, date=date, member=i, output=output, at_time=at_time)
+    output=f'{store_file}/member{i}/{date}_h{at_time}-{dur}'
+#    CreateLCSField(lons=[4.5,23], lats=[67,69.9], ts=-3600, sep=1000, dur=24, date=date, member=i, output=output, at_time=at_time)
+    #CreateLCSField(lons=[23.5, 26.4], lats=[69.6, 72.6], ts=-3600, sep=sep, dur=dur, date=date, member=i, output=output, at_time=at_time)
+    
+
+    if member==0:
+        # Finnmark domain
+        CreateLCSField(lons=[28.0, 27.], lats=[68.2, 73.], ts=-3600, sep=sep, dur=dur, date=date, member=i, output=output, at_time=at_time)
+    elif member==1:
+        # Troms domain
+        CreateLCSField(lons=[19.2, 19.0], lats=[68.3, 72.0], ts=-3600, sep=sep, dur=dur, date=date, member=i, output=output, at_time=at_time)
+    elif member==2:
+        # Nordland domain
+        CreateLCSField(lons=[13.4, 12.5], lats=[65.7, 69.9], ts=-3600, sep=sep, dur=dur, date=date, member=i, output=output, at_time=at_time)
+
 
 if __name__ == '__main__':
     """
-    import os
-    for i in range(24):
-        os.mkdir(f'logs/ALCS_files_2h_april/member{i}')
     """
-    store_file = 'ALCS_jun'
     import sys
-    sel = int(sys.argv[1])
-    #sel = 1
-    #dates = [f'202302{d:02d}' for d in range(1,32)]
-    dates = ['20230628']
+    from glob import glob
+    import os.path
+
+
+    # Folder to store nc files
+    store_file = '../data/ncfiles'
+ 
+    # Parameters    
+    at_time = 23   # time when the LCS field is valid
+    dur = 12        # delta t for LCS computation
+    sep = 600
+
+    member = 0 # Finnmark
+    #member = 1 # Troms
+    #member = 2 # Nordland
+
+
+
+    # List of dates in string format ['YYYYMMDD']
+#    dates = [f'202303{d:02d}' for d in range(20,31)]
+    #dates = ['20230628']
+    d0 = datetime(2023,3,1)
+    dates = [(d0 + timedelta(days=i)).strftime('%Y%m%d') for i in range(0,30)]
+    print('***\n Processing dates: \n',dates,'\n****')
+
+    # Run the LCS analysis
+    #for curr_date in dates:
+    #    Run(member, curr_date, at_time)
+
+
+
     
-    curr_date = dates[sel-1]
-    #Run(0, curr_date)
-    for i in range(24):
-        Run(i, curr_date)
     
-    
-    #Run(0, '20221210')
-    """
-    for t in times:
-        for i in range(24):
-            Run(i, int(t), curr_date)
-    """
+
+
+    # POST PROCESSING
+
+    tag = f'h{at_time}-{dur}'
+
+    files = np.array([f'{store_file}/member{member}/{item}_{tag}_LCS.nc' for item in dates])
+    files = files[ np.where([os.path.exists(item) for item in files])[0] ]
+
+    if len(files)==0:
+        print('no files available... ')
+        exit()
+
+    tag+='_{:02d}'.format(member)
+    outdir = '../data/plots'
+    postproc(files, outdir, tag=tag, single=False, average=True)
+
+
